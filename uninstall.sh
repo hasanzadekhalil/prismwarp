@@ -2,7 +2,7 @@
 # ==============================================================================
 # PrismWarp Uninstaller
 # Author: Khalil Hasanzade
-# Repository: https://github.com/khasanzade/prismwarp
+# Repository: https://github.com/hasanzadekhalil/prismwarp
 # License: MIT
 # ==============================================================================
 

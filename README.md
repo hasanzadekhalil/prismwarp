@@ -31,9 +31,9 @@
     ·
     <a href="#usage">Client Integration</a>
     ·
-    <a href="https://github.com/khasanzade/prismwarp/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
+    <a href="https://github.com/hasanzadekhalil/prismwarp/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
     ·
-    <a href="https://github.com/khasanzade/prismwarp/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
+    <a href="https://github.com/hasanzadekhalil/prismwarp/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
   </p>
 </div>
 
@@ -154,14 +154,14 @@ The following benchmarks were recorded on an 8-Core, 8 GB RAM Ubuntu 24.04 LTS V
 Deploy a full 12-proxy pool on ports `40001–40012` with a single command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/khasanzade/prismwarp/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/hasanzadekhalil/prismwarp/main/install.sh | sudo bash
 ```
 
 ### Manual Installation
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/khasanzade/prismwarp.git
+   git clone https://github.com/hasanzadekhalil/prismwarp.git
    cd prismwarp
    ```
 
@@ -358,7 +358,7 @@ proxychains4 curl https://api.ipify.org
 - [ ] Built-in round-robin HAProxy / Envoy load balancer config generator
 - [ ] SOCKS5 basic authentication support
 
-See the [open issues](https://github.com/khasanzade/prismwarp/issues) for a full list of proposed features (and known issues).
+See the [open issues](https://github.com/hasanzadekhalil/prismwarp/issues) for a full list of proposed features (and known issues).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -393,8 +393,8 @@ Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information
 
 **Khalil Hasanzade**
 
-* GitHub: [@khasanzade](https://github.com/khasanzade)
-* Project Link: [https://github.com/khasanzade/prismwarp](https://github.com/khasanzade/prismwarp)
+* GitHub: [@hasanzadekhalil](https://github.com/hasanzadekhalil)
+* Project Link: [https://github.com/hasanzadekhalil/prismwarp](https://github.com/hasanzadekhalil/prismwarp)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -410,16 +410,16 @@ This software is developed and distributed for educational, research, and legiti
 ---
 
 <!-- MARKDOWN LINKS & IMAGES -->
-[contributors-shield]: https://img.shields.io/github/contributors/khasanzade/prismwarp.svg?style=for-the-badge
-[contributors-url]: https://github.com/khasanzade/prismwarp/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/khasanzade/prismwarp.svg?style=for-the-badge
-[forks-url]: https://github.com/khasanzade/prismwarp/network/members
-[stars-shield]: https://img.shields.io/github/stars/khasanzade/prismwarp.svg?style=for-the-badge
-[stars-url]: https://github.com/khasanzade/prismwarp/stargazers
-[issues-shield]: https://img.shields.io/github/issues/khasanzade/prismwarp.svg?style=for-the-badge
-[issues-url]: https://github.com/khasanzade/prismwarp/issues
-[license-shield]: https://img.shields.io/github/license/khasanzade/prismwarp.svg?style=for-the-badge
-[license-url]: https://github.com/khasanzade/prismwarp/blob/main/LICENSE
+[contributors-shield]: https://img.shields.io/github/contributors/hasanzadekhalil/prismwarp.svg?style=for-the-badge
+[contributors-url]: https://github.com/hasanzadekhalil/prismwarp/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/hasanzadekhalil/prismwarp.svg?style=for-the-badge
+[forks-url]: https://github.com/hasanzadekhalil/prismwarp/network/members
+[stars-shield]: https://img.shields.io/github/stars/hasanzadekhalil/prismwarp.svg?style=for-the-badge
+[stars-url]: https://github.com/hasanzadekhalil/prismwarp/stargazers
+[issues-shield]: https://img.shields.io/github/issues/hasanzadekhalil/prismwarp.svg?style=for-the-badge
+[issues-url]: https://github.com/hasanzadekhalil/prismwarp/issues
+[license-shield]: https://img.shields.io/github/license/hasanzadekhalil/prismwarp.svg?style=for-the-badge
+[license-url]: https://github.com/hasanzadekhalil/prismwarp/blob/main/LICENSE
 [linux-shield]: https://img.shields.io/badge/Platform-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black
 [linux-url]: https://www.kernel.org/
 [go-shield]: https://img.shields.io/badge/Engine-Go_Wireproxy-00ADD8?style=for-the-badge&logo=go&logoColor=white

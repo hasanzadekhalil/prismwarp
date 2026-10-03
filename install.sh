@@ -2,7 +2,7 @@
 # ==============================================================================
 # PrismWarp: Ultra-lightweight Cloudflare WARP SOCKS5 Multi-Proxy Pool Installer
 # Author: Khalil Hasanzade
-# Repository: https://github.com/khasanzade/prismwarp
+# Repository: https://github.com/hasanzadekhalil/prismwarp
 # License: MIT
 # ==============================================================================
 
@@ -379,7 +379,7 @@ deploy_systemd() {
 Description=PrismWarp Cloudflare SOCKS5 Instance %i
 After=network.target network-online.target
 Wants=network-online.target
-Documentation=https://github.com/khasanzade/prismwarp
+Documentation=https://github.com/hasanzadekhalil/prismwarp
 
 [Service]
 Type=simple

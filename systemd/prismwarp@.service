@@ -2,7 +2,7 @@
 Description=PrismWarp Cloudflare SOCKS5 Instance %i
 After=network.target network-online.target
 Wants=network-online.target
-Documentation=https://github.com/khasanzade/prismwarp
+Documentation=https://github.com/hasanzadekhalil/prismwarp
 
 [Service]
 Type=simple
