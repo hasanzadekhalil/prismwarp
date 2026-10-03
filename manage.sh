@@ -39,6 +39,8 @@ Commands:
   start   [all | <id>]     Start all instances or a specific instance
   stop    [all | <id>]     Stop all instances or a specific instance
   add     <count>          Add N additional proxy instances to the active pool
+  delete  [all | <id>]     Stop and remove an instance from the pool (e.g., 'prismwarp delete 08')
+  prune                    Clean up any incomplete or broken proxy instances
   logs    <id>             Follow live journal logs for an instance (e.g., 'prismwarp logs 01')
   export  <format>         Export proxy endpoints (formats: list, json, 9router)
   help                     Show this help message
@@ -56,7 +58,9 @@ check_installed() {
 
 get_instances() {
     find "$CONFIGS_DIR" -mindepth 1 -maxdepth 1 -type d -name "warp-*" | sort | while read -r dir; do
-        basename "$dir" | sed 's/warp-//'
+        if [[ -f "${dir}/wireproxy.conf" ]]; then
+            basename "$dir" | sed 's/warp-//'
+        fi
     done
 }
 
@@ -91,7 +95,8 @@ cmd_status() {
         local unit="prismwarp@${id}.service"
 
         local state
-        state=$(systemctl is-active "$unit" 2>/dev/null || echo "inactive")
+        state=$(systemctl is-active "$unit" 2>/dev/null || true)
+        state="${state:-inactive}"
 
         local mem_str="0 MB"
         local mem_bytes
@@ -268,7 +273,6 @@ cmd_add() {
 
         local instance_dir="${CONFIGS_DIR}/warp-${curr_id}"
         local conf_file="${instance_dir}/wireproxy.conf"
-        mkdir -p "$instance_dir"
 
         log_info "Registering WARP account for warp-${curr_id} (Port ${curr_port})..."
         local tmp_dir
@@ -313,6 +317,7 @@ cmd_add() {
         address=$(grep -m 1 "^Address" wgcf-profile.conf | cut -d'=' -f2- | sed 's/^[ \t]*//')
         endpoint=$(grep -m 1 "^Endpoint" wgcf-profile.conf | awk '{print $3}')
 
+        mkdir -p "$instance_dir"
         cat > "$conf_file" << EOF
 [Interface]
 PrivateKey = ${priv_key}
@@ -335,6 +340,63 @@ EOF
         log_success "Instance warp-${curr_id} active on port ${curr_port}"
     done
     log_success "Pool expansion complete. Run 'prismwarp status' to view updated state."
+}
+
+# ------------------------------------------------------------------------------
+# Command: delete / remove
+# ------------------------------------------------------------------------------
+cmd_delete() {
+    check_installed
+    local target="${1:-}"
+    if [[ -z "$target" ]]; then
+        log_error "Please specify instance ID to delete (e.g., 'prismwarp delete 08') or 'all'."
+        exit 1
+    fi
+
+    if [[ "$target" == "all" ]]; then
+        log_warn "Stopping and deleting all instances..."
+        while read -r id; do
+            [[ -z "$id" ]] && continue
+            systemctl stop "prismwarp@${id}" 2>/dev/null || true
+            systemctl disable "prismwarp@${id}" 2>/dev/null || true
+            rm -rf "${CONFIGS_DIR}/warp-${id}"
+        done < <(get_instances)
+        log_success "All instances removed from pool."
+    else
+        local padded_id
+        padded_id=$(printf "%02d" "${target#0}")
+        local instance_dir="${CONFIGS_DIR}/warp-${padded_id}"
+        if [[ ! -d "$instance_dir" ]]; then
+            log_error "Instance warp-${padded_id} not found."
+            exit 1
+        fi
+        log_info "Stopping and removing warp-${padded_id}..."
+        systemctl stop "prismwarp@${padded_id}" 2>/dev/null || true
+        systemctl disable "prismwarp@${padded_id}" 2>/dev/null || true
+        rm -rf "$instance_dir"
+        log_success "Instance warp-${padded_id} deleted successfully."
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# Command: prune / clean
+# ------------------------------------------------------------------------------
+cmd_prune() {
+    check_installed
+    log_info "Scanning for broken, incomplete, or unconfigured instances..."
+    local pruned=0
+    find "$CONFIGS_DIR" -mindepth 1 -maxdepth 1 -type d -name "warp-*" | sort | while read -r dir; do
+        local id
+        id=$(basename "$dir" | sed 's/warp-//')
+        if [[ ! -f "${dir}/wireproxy.conf" ]]; then
+            log_warn "Found incomplete instance warp-${id} (missing wireproxy.conf). Cleaning up..."
+            systemctl stop "prismwarp@${id}" 2>/dev/null || true
+            systemctl disable "prismwarp@${id}" 2>/dev/null || true
+            rm -rf "$dir"
+            pruned=$((pruned + 1))
+        fi
+    done
+    log_success "Prune complete. All incomplete instances removed."
 }
 
 # ------------------------------------------------------------------------------
@@ -406,14 +468,16 @@ main() {
     shift || true
 
     case "$cmd" in
-        status)     cmd_status "$@" ;;
-        test)       cmd_test "$@" ;;
-        restart)    cmd_restart "$@" ;;
-        start)      cmd_start "$@" ;;
-        stop)       cmd_stop "$@" ;;
-        add)        cmd_add "$@" ;;
-        logs)       cmd_logs "$@" ;;
-        export)     cmd_export "$@" ;;
+        status)         cmd_status "$@" ;;
+        test)           cmd_test "$@" ;;
+        restart)        cmd_restart "$@" ;;
+        start)          cmd_start "$@" ;;
+        stop)           cmd_stop "$@" ;;
+        add)            cmd_add "$@" ;;
+        delete|remove)  cmd_delete "$@" ;;
+        prune|clean)    cmd_prune "$@" ;;
+        logs)           cmd_logs "$@" ;;
+        export)         cmd_export "$@" ;;
         help|-h|--help) print_help ;;
         *)
             log_error "Unknown command: $cmd"

@@ -206,6 +206,8 @@ prismwarp <command> [arguments]
 | `prismwarp restart all` | Gracefully restarts all instances in the pool. |
 | `prismwarp restart <id>` | Restarts a single instance (e.g. `prismwarp restart 01`). |
 | `prismwarp add <N>` | Dynamically generates and boots `N` additional proxies into the active pool. |
+| `prismwarp delete <id>` | Stops and removes a proxy instance from the pool (e.g. `prismwarp delete 08`). |
+| `prismwarp prune` | Automatically scans and cleans up broken or unconfigured instances. |
 | `prismwarp stop all` | Stops all proxy instances. |
 | `prismwarp start all` | Starts all proxy instances. |
 | `prismwarp logs <id>` | Streams live journald logs for an instance (e.g. `prismwarp logs 01`). |

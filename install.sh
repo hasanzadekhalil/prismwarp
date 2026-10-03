@@ -337,6 +337,7 @@ generate_pool() {
                 rm -rf "$tmp_run_dir"
                 if ! handle_rate_limit "$i" "$COUNT"; then
                     # User chose option 2: finalize current
+                    rm -rf "$instance_dir"
                     break 2
                 fi
                 continue
