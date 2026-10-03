@@ -203,6 +203,7 @@ prismwarp <command> [arguments]
 | :--- | :--- |
 | `prismwarp status` | Displays live status, individual RAM usage, port mapping, and egress IP for every instance. |
 | `prismwarp test` | Concurrently measures round-trip latency, connection health, and Cloudflare colo location. |
+| `prismwarp bind <IP>` | Changes listening/bind IP for all proxies (e.g. `0.0.0.0` or Tailscale IP). |
 | `prismwarp restart all` | Gracefully restarts all instances in the pool. |
 | `prismwarp restart <id>` | Restarts a single instance (e.g. `prismwarp restart 01`). |
 | `prismwarp add <N>` | Dynamically generates and boots `N` additional proxies into the active pool. |

@@ -19,6 +19,7 @@ NC=$'\033[0m' # No Color
 # Default Parameters
 DEFAULT_COUNT=12
 DEFAULT_START_PORT=40001
+DEFAULT_BIND_IP="127.0.0.1"
 INSTALL_DIR="/etc/prismwarp"
 CONFIGS_DIR="${INSTALL_DIR}/configs"
 SYSTEMD_UNIT="/etc/systemd/system/prismwarp@.service"
@@ -29,6 +30,7 @@ WGCF_BIN="/usr/local/bin/wgcf"
 
 COUNT=""
 START_PORT=""
+BIND_IP=""
 NON_INTERACTIVE=false
 
 # ------------------------------------------------------------------------------
@@ -59,6 +61,7 @@ show_help() {
     echo "Options:"
     echo "  -c, --count <NUMBER>       Number of proxy instances to create (default: 12)"
     echo "  -p, --start-port <PORT>    Starting local SOCKS5 port (default: 40001)"
+    echo "  -b, --bind <IP>            Listening IP address (default: 127.0.0.1, use 0.0.0.0 for LAN/public)"
     echo "  -y, --yes                  Run in non-interactive/unattended mode"
     echo "  -h, --help                 Show this help menu"
     echo ""
@@ -76,6 +79,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -p|--start-port)
             START_PORT="$2"
+            shift 2
+            ;;
+        -b|--bind|--bind-ip)
+            BIND_IP="$2"
             shift 2
             ;;
         -y|--yes)
@@ -213,6 +220,7 @@ get_user_input() {
     if [[ "$NON_INTERACTIVE" == true ]]; then
         COUNT="${COUNT:-$DEFAULT_COUNT}"
         START_PORT="${START_PORT:-$DEFAULT_START_PORT}"
+        BIND_IP="${BIND_IP:-$DEFAULT_BIND_IP}"
         return
     fi
 
@@ -225,8 +233,12 @@ get_user_input() {
         START_PORT=$(prompt_input "Enter starting SOCKS5 port [default: $DEFAULT_START_PORT]: " "$DEFAULT_START_PORT")
     fi
 
+    if [[ -z "$BIND_IP" ]]; then
+        BIND_IP=$(prompt_input "Enter listening IP (127.0.0.1 for local only, 0.0.0.0 for all interfaces) [default: $DEFAULT_BIND_IP]: " "$DEFAULT_BIND_IP")
+    fi
+
     echo ""
-    log_info "Deployment plan: Deploying ${COUNT} instances on ports ${START_PORT} to $((START_PORT + COUNT - 1))."
+    log_info "Deployment plan: Deploying ${COUNT} instances on ${BIND_IP}:${START_PORT} to ${BIND_IP}:$((START_PORT + COUNT - 1))."
     local confirm
     confirm=$(prompt_input "Proceed with installation? [Y/n]: " "Y")
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -307,8 +319,8 @@ generate_pool() {
         # If configuration already exists and is valid, reuse it
         if [[ -f "$conf_file" ]] && grep -q "PrivateKey" "$conf_file"; then
             log_success "Instance ${id}: Existing configuration found. Reusing."
-            # Ensure port matches intended port
-            sed -i "s/BindAddress = 127.0.0.1:.*/BindAddress = 127.0.0.1:${current_port}/" "$conf_file"
+            # Ensure port and bind IP match intended settings
+            sed -i "s/^BindAddress = .*/BindAddress = ${BIND_IP}:${current_port}/" "$conf_file"
             current_port=$((current_port + 1))
             created_count=$((created_count + 1))
             continue
@@ -372,13 +384,13 @@ Endpoint = ${endpoint}
 Keepalive = 25
 
 [Socks5]
-BindAddress = 127.0.0.1:${current_port}
+BindAddress = ${BIND_IP}:${current_port}
 EOF
             chmod 600 "$conf_file"
             popd >/dev/null
             rm -rf "$tmp_run_dir"
             success=true
-            log_success "Instance ${id}: Configured on 127.0.0.1:${current_port}"
+            log_success "Instance ${id}: Configured on ${BIND_IP}:${current_port}"
         done
 
         current_port=$((current_port + 1))
@@ -391,6 +403,7 @@ EOF
 # Generated on: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 INSTANCE_COUNT=${created_count}
 START_PORT=${START_PORT}
+BIND_IP=${BIND_IP}
 CONFIGS_DIR=${CONFIGS_DIR}
 EOF
 }
@@ -470,8 +483,13 @@ run_diagnostics() {
         id=$(printf "%02d" "$i")
         local port=$((START_PORT + i - 1))
 
+        local test_ip="127.0.0.1"
+        if [[ "$BIND_IP" != "0.0.0.0" && "$BIND_IP" != "127.0.0.1" ]]; then
+            test_ip="$BIND_IP"
+        fi
+
         local trace_resp
-        trace_resp="$(curl --socks5-hostname "127.0.0.1:${port}" -s --max-time 4 "https://cloudflare.com/cdn-cgi/trace" 2>/dev/null || true)"
+        trace_resp="$(curl --socks5-hostname "${test_ip}:${port}" -s --max-time 4 "https://cloudflare.com/cdn-cgi/trace" 2>/dev/null || true)"
 
         if echo "$trace_resp" | grep -q "ip="; then
             local egress_ip colo
@@ -500,7 +518,8 @@ ${GREEN}${BOLD}PrismWarp Deployment Completed Successfully!${NC}
 
 ${BOLD}Pool Summary:${NC}
   Total Instances: ${COUNT}
-  Port Range:      127.0.0.1:${START_PORT} - 127.0.0.1:$((START_PORT + COUNT - 1))
+  Port Range:      ${BIND_IP}:${START_PORT} - ${BIND_IP}:$((START_PORT + COUNT - 1))
+  Bind Address:    ${BIND_IP}
   Protocol:        SOCKS5 (Userspace WireGuard)
   Configs:         ${CONFIGS_DIR}
 

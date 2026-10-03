@@ -20,6 +20,13 @@ CONFIGS_DIR="${INSTALL_DIR}/configs"
 ENV_FILE="${INSTALL_DIR}/prismwarp.env"
 WGCF_BIN="/usr/local/bin/wgcf"
 
+# Load persistent environment state if available
+if [[ -f "$ENV_FILE" ]]; then
+    # shellcheck source=/dev/null
+    source "$ENV_FILE"
+fi
+BIND_IP="${BIND_IP:-127.0.0.1}"
+
 log_info()    { echo -e "${CYAN}[*]${NC} $1"; }
 log_success() { echo -e "${GREEN}[+]${NC} $1"; }
 log_warn()    { echo -e "${YELLOW}[!]${NC} $1"; }
@@ -35,14 +42,15 @@ Usage: prismwarp <command> [arguments]
 Commands:
   status                   Display live status, memory usage, and egress IP of all instances
   test                     Perform connection latency and egress IP verification
-  restart [all | <id>]     Restart all instances or a specific instance (e.g., 'prismwarp restart 01')
+  bind    <IP>             Change listening/bind IP for all proxies (e.g. 'prismwarp bind 0.0.0.0')
+  restart [all | <id>]     Restart all instances or a specific instance (e.g. 'prismwarp restart 01')
   start   [all | <id>]     Start all instances or a specific instance
   stop    [all | <id>]     Stop all instances or a specific instance
   add     <count>          Add N additional proxy instances to the active pool
-  delete  [all | <id>]     Stop and remove an instance from the pool (e.g., 'prismwarp delete 08')
+  delete  [all | <id>]     Stop and remove an instance from the pool (e.g. 'prismwarp delete 08')
   prune                    Clean up any incomplete or broken proxy instances
-  logs    <id>             Follow live journal logs for an instance (e.g., 'prismwarp logs 01')
-  export  <format>         Export proxy endpoints (formats: list, json, 9router)
+  logs    <id>             Follow live journal logs for an instance (e.g. 'prismwarp logs 01')
+  export  <format> [host]  Export proxy endpoints (formats: list, json, 9router)
   help                     Show this help message
 
 EOF
@@ -68,9 +76,19 @@ get_port_for_id() {
     local id="$1"
     local conf="${CONFIGS_DIR}/warp-${id}/wireproxy.conf"
     if [[ -f "$conf" ]]; then
-        grep "^BindAddress" "$conf" | cut -d':' -f2 | tr -d ' '
+        grep "^BindAddress" "$conf" | cut -d'=' -f2 | awk -F':' '{print $NF}' | tr -d ' '
     else
         echo "N/A"
+    fi
+}
+
+get_bind_for_id() {
+    local id="$1"
+    local conf="${CONFIGS_DIR}/warp-${id}/wireproxy.conf"
+    if [[ -f "$conf" ]]; then
+        grep "^BindAddress" "$conf" | cut -d'=' -f2 | awk -F':' '{print $1}' | tr -d ' '
+    else
+        echo "$BIND_IP"
     fi
 }
 
@@ -79,9 +97,9 @@ get_port_for_id() {
 # ------------------------------------------------------------------------------
 cmd_status() {
     check_installed
-    echo -e "${BOLD}==============================================================================${NC}"
-    printf "%-10s %-12s %-12s %-12s %-30s\n" "INSTANCE" "PORT" "STATUS" "MEMORY" "EGRESS IP"
-    echo -e "${BOLD}==============================================================================${NC}"
+    echo -e "${BOLD}========================================================================================${NC}"
+    printf "%-10s %-22s %-12s %-12s %-30s\n" "INSTANCE" "ENDPOINT" "STATUS" "MEMORY" "EGRESS IP"
+    echo -e "${BOLD}========================================================================================${NC}"
 
     local total_rss_kb=0
     local active_count=0
@@ -90,8 +108,10 @@ cmd_status() {
     while read -r id; do
         [[ -z "$id" ]] && continue
         total_count=$((total_count + 1))
-        local port
+        local bind_ip port
+        bind_ip=$(get_bind_for_id "$id")
         port=$(get_port_for_id "$id")
+        local endpoint="${bind_ip}:${port}"
         local unit="prismwarp@${id}.service"
 
         local state
@@ -118,14 +138,18 @@ cmd_status() {
 
         # Quick trace test
         local egress_ip="-"
+        local test_ip="127.0.0.1"
+        if [[ "$bind_ip" != "0.0.0.0" && "$bind_ip" != "127.0.0.1" ]]; then
+            test_ip="$bind_ip"
+        fi
         if [[ "$state" == "active" ]]; then
-            egress_ip=$(curl --socks5-hostname "127.0.0.1:${port}" -s --max-time 1.5 "https://cloudflare.com/cdn-cgi/trace" 2>/dev/null | grep "^ip=" | cut -d'=' -f2 || echo "online (cached)")
+            egress_ip=$(curl --socks5-hostname "${test_ip}:${port}" -s --max-time 1.5 "https://cloudflare.com/cdn-cgi/trace" 2>/dev/null | grep "^ip=" | cut -d'=' -f2 || echo "online (cached)")
         fi
 
-        printf "%-10s %-12s %-20b %-12s %-30s\n" "warp-${id}" "${port}" "${state_colored}" "${mem_str}" "${egress_ip}"
+        printf "%-10s %-22s %-20b %-12s %-30s\n" "warp-${id}" "${endpoint}" "${state_colored}" "${mem_str}" "${egress_ip}"
     done < <(get_instances)
 
-    echo -e "${BOLD}==============================================================================${NC}"
+    echo -e "${BOLD}========================================================================================${NC}"
     local total_mb
     total_mb=$(awk "BEGIN {printf \"%.1f\", $total_rss_kb/1024}")
     echo -e "${BOLD}Active Pools:${NC} ${active_count}/${total_count} instances operational"
@@ -139,19 +163,26 @@ cmd_status() {
 cmd_test() {
     check_installed
     echo -e "${BOLD}Testing latency and egress for all active proxies...${NC}"
-    echo -e "${BOLD}------------------------------------------------------------------------------${NC}"
-    printf "%-10s %-10s %-10s %-12s %-32s %-8s\n" "INSTANCE" "PORT" "STATUS" "LATENCY" "EGRESS IP" "COLO"
-    echo -e "${BOLD}------------------------------------------------------------------------------${NC}"
+    echo -e "${BOLD}----------------------------------------------------------------------------------------${NC}"
+    printf "%-10s %-22s %-10s %-12s %-32s %-8s\n" "INSTANCE" "ENDPOINT" "STATUS" "LATENCY" "EGRESS IP" "COLO"
+    echo -e "${BOLD}----------------------------------------------------------------------------------------${NC}"
 
     while read -r id; do
         [[ -z "$id" ]] && continue
-        local port
+        local bind_ip port
+        bind_ip=$(get_bind_for_id "$id")
         port=$(get_port_for_id "$id")
+        local endpoint="${bind_ip}:${port}"
+
+        local test_ip="127.0.0.1"
+        if [[ "$bind_ip" != "0.0.0.0" && "$bind_ip" != "127.0.0.1" ]]; then
+            test_ip="$bind_ip"
+        fi
 
         local start_ts end_ts latency_ms
         start_ts=$(date +%s%3N)
         local trace_resp
-        trace_resp=$(curl --socks5-hostname "127.0.0.1:${port}" -s --max-time 4 "https://cloudflare.com/cdn-cgi/trace" 2>/dev/null || true)
+        trace_resp=$(curl --socks5-hostname "${test_ip}:${port}" -s --max-time 4 "https://cloudflare.com/cdn-cgi/trace" 2>/dev/null || true)
         end_ts=$(date +%s%3N)
         latency_ms=$((end_ts - start_ts))
 
@@ -159,12 +190,12 @@ cmd_test() {
             local ip colo
             ip=$(echo "$trace_resp" | grep "^ip=" | cut -d'=' -f2)
             colo=$(echo "$trace_resp" | grep "^colo=" | cut -d'=' -f2)
-            printf "%-10s %-10s %-18b %-12s %-32s %-8s\n" "warp-${id}" "${port}" "${GREEN}SUCCESS${NC}" "${latency_ms}ms" "${ip}" "${colo}"
+            printf "%-10s %-22s %-18b %-12s %-32s %-8s\n" "warp-${id}" "${endpoint}" "${GREEN}SUCCESS${NC}" "${latency_ms}ms" "${ip}" "${colo}"
         else
-            printf "%-10s %-10s %-18b %-12s %-32s %-8s\n" "warp-${id}" "${port}" "${RED}FAILED${NC}" "timeout" "N/A" "N/A"
+            printf "%-10s %-22s %-18b %-12s %-32s %-8s\n" "warp-${id}" "${endpoint}" "${RED}FAILED${NC}" "timeout" "N/A" "N/A"
         fi
     done < <(get_instances)
-    echo -e "${BOLD}------------------------------------------------------------------------------${NC}"
+    echo -e "${BOLD}----------------------------------------------------------------------------------------${NC}"
 }
 
 # ------------------------------------------------------------------------------
@@ -330,14 +361,14 @@ Endpoint = ${endpoint}
 Keepalive = 25
 
 [Socks5]
-BindAddress = 127.0.0.1:${curr_port}
+BindAddress = ${BIND_IP}:${curr_port}
 EOF
         chmod 600 "$conf_file"
         popd >/dev/null
         rm -rf "$tmp_dir"
 
         systemctl enable --now "prismwarp@${curr_id}" >/dev/null 2>&1
-        log_success "Instance warp-${curr_id} active on port ${curr_port}"
+        log_success "Instance warp-${curr_id} active on ${BIND_IP}:${curr_port}"
     done
     log_success "Pool expansion complete. Run 'prismwarp status' to view updated state."
 }
@@ -400,6 +431,52 @@ cmd_prune() {
 }
 
 # ------------------------------------------------------------------------------
+# Command: bind / set-bind
+# ------------------------------------------------------------------------------
+cmd_bind() {
+    check_installed
+    local new_bind="$1"
+    if [[ -z "$new_bind" ]]; then
+        echo -e "${BOLD}Current default bind IP:${NC} ${CYAN}${BIND_IP}${NC}"
+        echo ""
+        echo "Usage: prismwarp bind <IP>"
+        echo "Examples:"
+        echo "  prismwarp bind 0.0.0.0          # Listen on all network interfaces"
+        echo "  prismwarp bind 100.100.155.115  # Listen on specific Tailscale / LAN IP"
+        echo "  prismwarp bind 127.0.0.1        # Listen on localhost only"
+        return
+    fi
+
+    log_info "Updating BindAddress to ${new_bind} across all proxy instances..."
+    local updated_count=0
+    while read -r id; do
+        [[ -z "$id" ]] && continue
+        local conf="${CONFIGS_DIR}/warp-${id}/wireproxy.conf"
+        if [[ -f "$conf" ]]; then
+            local port
+            port=$(get_port_for_id "$id")
+            sed -i "s/^BindAddress = .*/BindAddress = ${new_bind}:${port}/" "$conf"
+            systemctl restart "prismwarp@${id}" 2>/dev/null || true
+            updated_count=$((updated_count + 1))
+        fi
+    done < <(get_instances)
+
+    # Persist in ENV_FILE
+    BIND_IP="$new_bind"
+    if [[ -f "$ENV_FILE" ]]; then
+        if grep -q "^BIND_IP=" "$ENV_FILE"; then
+            sed -i "s/^BIND_IP=.*/BIND_IP=${new_bind}/" "$ENV_FILE"
+        else
+            echo "BIND_IP=${new_bind}" >> "$ENV_FILE"
+        fi
+    else
+        echo "BIND_IP=${new_bind}" > "$ENV_FILE"
+    fi
+
+    log_success "Updated and restarted ${updated_count} proxy instances to listen on ${new_bind}."
+}
+
+# ------------------------------------------------------------------------------
 # Command: logs
 # ------------------------------------------------------------------------------
 cmd_logs() {
@@ -415,23 +492,39 @@ cmd_logs() {
 cmd_export() {
     check_installed
     local format="${1:-list}"
+    local custom_host="${2:-}"
+
+    local default_host="$BIND_IP"
+    if [[ -n "$custom_host" ]]; then
+        default_host="$custom_host"
+    elif [[ "$default_host" == "0.0.0.0" ]]; then
+        default_host=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}' || echo "0.0.0.0")
+    fi
 
     case "$format" in
         list)
             while read -r id; do
                 [[ -z "$id" ]] && continue
-                local port
+                local port host
                 port=$(get_port_for_id "$id")
-                echo "socks5://127.0.0.1:${port}"
+                host="$default_host"
+                if [[ -z "$custom_host" && "$BIND_IP" != "0.0.0.0" ]]; then
+                    host=$(get_bind_for_id "$id")
+                fi
+                echo "socks5://${host}:${port}"
             done < <(get_instances)
             ;;
         json)
             local list=()
             while read -r id; do
                 [[ -z "$id" ]] && continue
-                local port
+                local port host
                 port=$(get_port_for_id "$id")
-                list+=("\"socks5://127.0.0.1:${port}\"")
+                host="$default_host"
+                if [[ -z "$custom_host" && "$BIND_IP" != "0.0.0.0" ]]; then
+                    host=$(get_bind_for_id "$id")
+                fi
+                list+=("\"socks5://${host}:${port}\"")
             done < <(get_instances)
             echo "[$(IFS=,; echo "${list[*]}")]"
             ;;
@@ -443,9 +536,13 @@ HEADER
             local entries=()
             while read -r id; do
                 [[ -z "$id" ]] && continue
-                local port
+                local port host
                 port=$(get_port_for_id "$id")
-                entries+=("    {\"url\": \"socks5://127.0.0.1:${port}\", \"name\": \"warp-${id}\"}")
+                host="$default_host"
+                if [[ -z "$custom_host" && "$BIND_IP" != "0.0.0.0" ]]; then
+                    host=$(get_bind_for_id "$id")
+                fi
+                entries+=("    {\"url\": \"socks5://${host}:${port}\", \"name\": \"warp-${id}\"}")
             done < <(get_instances)
             (IFS=,; echo "${entries[*]}")
             cat << 'FOOTER'
@@ -470,6 +567,7 @@ main() {
     case "$cmd" in
         status)         cmd_status "$@" ;;
         test)           cmd_test "$@" ;;
+        bind|set-bind)  cmd_bind "$@" ;;
         restart)        cmd_restart "$@" ;;
         start)          cmd_start "$@" ;;
         stop)           cmd_stop "$@" ;;
