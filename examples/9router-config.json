@@ -1,0 +1,25 @@
+{
+  "server": {
+    "port": 8080,
+    "host": "0.0.0.0"
+  },
+  "proxyPool": {
+    "enabled": true,
+    "strategy": "sticky_account",
+    "description": "Distributes API traffic across PrismWarp local Cloudflare SOCKS5 endpoints while pinning each account to a dedicated egress IPv6 to preserve prompt cache affinity.",
+    "endpoints": [
+      { "id": "warp-01", "url": "socks5://127.0.0.1:40001", "weight": 1 },
+      { "id": "warp-02", "url": "socks5://127.0.0.1:40002", "weight": 1 },
+      { "id": "warp-03", "url": "socks5://127.0.0.1:40003", "weight": 1 },
+      { "id": "warp-04", "url": "socks5://127.0.0.1:40004", "weight": 1 },
+      { "id": "warp-05", "url": "socks5://127.0.0.1:40005", "weight": 1 },
+      { "id": "warp-06", "url": "socks5://127.0.0.1:40006", "weight": 1 },
+      { "id": "warp-07", "url": "socks5://127.0.0.1:40007", "weight": 1 },
+      { "id": "warp-08", "url": "socks5://127.0.0.1:40008", "weight": 1 },
+      { "id": "warp-09", "url": "socks5://127.0.0.1:40009", "weight": 1 },
+      { "id": "warp-10", "url": "socks5://127.0.0.1:40010", "weight": 1 },
+      { "id": "warp-11", "url": "socks5://127.0.0.1:40011", "weight": 1 },
+      { "id": "warp-12", "url": "socks5://127.0.0.1:40012", "weight": 1 }
+    ]
+  }
+}

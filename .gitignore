@@ -1,0 +1,10 @@
+# Local environment and private WireGuard configs
+*.log
+*.tmp
+*.env
+wgcf-account.toml
+wgcf-profile.conf
+
+# Ignore local system configs in development
+/configs/
+/etc/
