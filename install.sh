@@ -194,10 +194,13 @@ prompt_input() {
     fi
 
     if [[ -t 0 ]]; then
-        read -r -p "$prompt" response || true
-    elif [[ -r /dev/tty && -c /dev/tty ]] && { exec 3</dev/tty; } 2>/dev/null; then
-        read -r -u 3 -p "$prompt" response 2>/dev/null || true
+        printf "%s" "$prompt" >&2
+        read -r response || true
+    elif { exec 3</dev/tty && exec 4>/dev/tty; } 2>/dev/null; then
+        printf "%s" "$prompt" >&4
+        read -r -u 3 response || true
         exec 3<&-
+        exec 4>&-
     fi
 
     echo "${response:-$default_val}"
