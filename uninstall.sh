@@ -28,6 +28,26 @@ log_success() { echo -e "${GREEN}[+]${NC} $1"; }
 log_warn()    { echo -e "${YELLOW}[!]${NC} $1"; }
 log_error()   { echo -e "${RED}[x]${NC} $1"; }
 
+prompt_input() {
+    local prompt="$1"
+    local default_val="$2"
+    local response=""
+
+    if [[ "$FORCE" == true ]]; then
+        echo "$default_val"
+        return
+    fi
+
+    if [[ -t 0 ]]; then
+        read -r -p "$prompt" response || true
+    elif [[ -r /dev/tty && -c /dev/tty ]] && { exec 3</dev/tty; } 2>/dev/null; then
+        read -r -u 3 -p "$prompt" response 2>/dev/null || true
+        exec 3<&-
+    fi
+
+    echo "${response:-$default_val}"
+}
+
 if [[ "$1" == "-y" ]] || [[ "$1" == "--yes" ]]; then
     FORCE=true
 fi
@@ -40,7 +60,7 @@ fi
 echo -e "${BOLD}PrismWarp Uninstaller${NC}"
 echo "This will stop all running PrismWarp proxy instances and remove system configs."
 if [[ "$FORCE" == false ]]; then
-    read -r -p "Are you sure you want to proceed? [y/N]: " confirm
+    confirm=$(prompt_input "Are you sure you want to proceed? [y/N]: " "n")
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
         log_warn "Uninstallation cancelled."
         exit 0
@@ -80,7 +100,7 @@ fi
 
 # 5. Remove binaries if requested or clean
 if [[ "$FORCE" == false ]]; then
-    read -r -p "Do you also want to remove wireproxy and wgcf binaries from /usr/local/bin? [y/N]: " rm_bins
+    rm_bins=$(prompt_input "Do you also want to remove wireproxy and wgcf binaries from /usr/local/bin? [y/N]: " "n")
     if [[ "$rm_bins" =~ ^[Yy]$ ]]; then
         rm -f "$WIREPROXY_BIN" "$WGCF_BIN"
         log_success "Binaries removed."

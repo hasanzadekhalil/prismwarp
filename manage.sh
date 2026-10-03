@@ -218,6 +218,23 @@ cmd_stop() {
 }
 
 # ------------------------------------------------------------------------------
+# Cloudflare 429 Cooldown Timer
+# ------------------------------------------------------------------------------
+cooldown_timer() {
+    local seconds=300
+    log_warn "Cloudflare API rate-limit cooldown engaged (5 minutes)."
+    echo -e "${CYAN}Waiting for Cloudflare rate limit counter to reset...${NC}"
+    while [[ $seconds -gt 0 ]]; do
+        local mins=$((seconds / 60))
+        local secs=$((seconds % 60))
+        printf "\r${YELLOW}[Cooldown] Time remaining: %02d:%02d...${NC} " "$mins" "$secs"
+        sleep 1
+        seconds=$((seconds - 1))
+    done
+    printf "\r${GREEN}[Cooldown] Cooldown completed! Resuming account generation...${NC}\n"
+}
+
+# ------------------------------------------------------------------------------
 # Command: add
 # ------------------------------------------------------------------------------
 cmd_add() {
@@ -258,12 +275,36 @@ cmd_add() {
         tmp_dir=$(mktemp -d /tmp/prismwarp-add-XXXXXX)
         pushd "$tmp_dir" >/dev/null
 
-        if ! "$WGCF_BIN" register --accept-tos >/dev/null 2>&1; then
-            log_warn "Registration failed or rate-limited on instance ${curr_id}."
-            popd >/dev/null
-            rm -rf "$tmp_dir"
-            break
-        fi
+        local registered=false
+        while [[ "$registered" == false ]]; do
+            local reg_out
+            set +e
+            reg_out=$("$WGCF_BIN" register --accept-tos 2>&1)
+            local reg_status=$?
+            set -e
+
+            if [[ $reg_status -ne 0 ]] || echo "$reg_out" | grep -qiE "429|Too Many Requests"; then
+                log_warn "Cloudflare rate limit (HTTP 429) hit at instance warp-${curr_id}."
+                if [[ -t 0 ]]; then
+                    read -r -p "Wait 5 minutes for Cloudflare cooldown and retry? [Y/n]: " wait_choice
+                    wait_choice="${wait_choice:-Y}"
+                    if [[ "$wait_choice" =~ ^[Yy]$ ]]; then
+                        cooldown_timer
+                        continue
+                    else
+                        log_info "Stopping pool expansion at current instances."
+                        popd >/dev/null
+                        rm -rf "$tmp_dir"
+                        break 2
+                    fi
+                else
+                    cooldown_timer
+                    continue
+                fi
+            else
+                registered=true
+            fi
+        done
 
         "$WGCF_BIN" generate >/dev/null 2>&1
         local priv_key pub_key address endpoint

@@ -181,6 +181,29 @@ install_binaries() {
 }
 
 # ------------------------------------------------------------------------------
+# Interactive Input Helpers (Safe with curl ... | bash pipe & /dev/tty)
+# ------------------------------------------------------------------------------
+prompt_input() {
+    local prompt="$1"
+    local default_val="$2"
+    local response=""
+
+    if [[ "$NON_INTERACTIVE" == true ]]; then
+        echo "$default_val"
+        return
+    fi
+
+    if [[ -t 0 ]]; then
+        read -r -p "$prompt" response || true
+    elif [[ -r /dev/tty && -c /dev/tty ]] && { exec 3</dev/tty; } 2>/dev/null; then
+        read -r -u 3 -p "$prompt" response 2>/dev/null || true
+        exec 3<&-
+    fi
+
+    echo "${response:-$default_val}"
+}
+
+# ------------------------------------------------------------------------------
 # Interactive Prompt
 # ------------------------------------------------------------------------------
 get_user_input() {
@@ -192,19 +215,17 @@ get_user_input() {
 
     echo -e "${BOLD}Configuration Setup:${NC}"
     if [[ -z "$COUNT" ]]; then
-        read -r -p "Enter number of proxy instances to deploy [default: $DEFAULT_COUNT]: " input_count
-        COUNT="${input_count:-$DEFAULT_COUNT}"
+        COUNT=$(prompt_input "Enter number of proxy instances to deploy [default: $DEFAULT_COUNT]: " "$DEFAULT_COUNT")
     fi
 
     if [[ -z "$START_PORT" ]]; then
-        read -r -p "Enter starting SOCKS5 port [default: $DEFAULT_START_PORT]: " input_port
-        START_PORT="${input_port:-$DEFAULT_START_PORT}"
+        START_PORT=$(prompt_input "Enter starting SOCKS5 port [default: $DEFAULT_START_PORT]: " "$DEFAULT_START_PORT")
     fi
 
     echo ""
     log_info "Deployment plan: Deploying ${COUNT} instances on ports ${START_PORT} to $((START_PORT + COUNT - 1))."
-    read -r -p "Proceed with installation? [Y/n]: " confirm
-    confirm="${confirm:-Y}"
+    local confirm
+    confirm=$(prompt_input "Proceed with installation? [Y/n]: " "Y")
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
         log_warn "Installation cancelled by user."
         exit 0
@@ -244,7 +265,8 @@ handle_rate_limit() {
     echo "  1) Wait 5 minutes with live cooldown timer, then resume automatically"
     echo "  2) Stop generating and finalize installation with the existing $((current_idx - 1)) proxies"
     echo "  3) Abort installation"
-    read -r -p "Enter choice [1/2/3]: " choice
+    local choice
+    choice=$(prompt_input "Enter choice [1/2/3]: " "1")
 
     case "$choice" in
         1)
@@ -410,11 +432,21 @@ EOF
 # ------------------------------------------------------------------------------
 install_cli() {
     local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [[ -f "${script_dir}/manage.sh" ]]; then
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
+    if [[ -n "$script_dir" && -f "${script_dir}/manage.sh" ]]; then
         cp "${script_dir}/manage.sh" "$CLI_BIN"
         chmod +x "$CLI_BIN"
         log_success "CLI management tool installed as '${CLI_BIN}'"
+    else
+        log_info "Downloading CLI management tool (prismwarp)..."
+        local cli_url="https://raw.githubusercontent.com/hasanzadekhalil/prismwarp/main/manage.sh"
+        if curl -fsSL "$cli_url" -o "$CLI_BIN"; then
+            chmod +x "$CLI_BIN"
+            log_success "CLI management tool installed as '${CLI_BIN}'"
+        else
+            log_error "Failed to download manage.sh from GitHub."
+            exit 1
+        fi
     fi
 }
 
